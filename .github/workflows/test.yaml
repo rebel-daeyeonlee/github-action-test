@@ -46,8 +46,15 @@ jobs:
         HOST_LIST_OUTPUT='${{ toJson(needs.regression-test.outputs.host-list) }}'
         echo "Raw output: $HOST_LIST_OUTPUT"
         
+        # Matrix job outputs는 문자열이므로 직접 사용
         if [ "$HOST_LIST_OUTPUT" != "null" ] && [ "$HOST_LIST_OUTPUT" != "[]" ] && [ -n "$HOST_LIST_OUTPUT" ]; then
-          HOST_LIST=$(echo "$HOST_LIST_OUTPUT" | jq -r '.[]' | sort -u | tr '\n' ' ' | sed 's/ $//')
+          # 문자열을 배열로 변환 (쉼표로 구분된 경우)
+          if [[ "$HOST_LIST_OUTPUT" == *","* ]]; then
+            HOST_LIST=$(echo "$HOST_LIST_OUTPUT" | tr ',' '\n' | sort -u | tr '\n' ' ' | sed 's/ $//')
+          else
+            # 단일 문자열인 경우
+            HOST_LIST="$HOST_LIST_OUTPUT"
+          fi
           echo "✅ Parsed from outputs: $HOST_LIST"
         else
           echo "❌ Failed to parse from outputs"
