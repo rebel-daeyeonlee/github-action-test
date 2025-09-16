@@ -5,17 +5,81 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  test:
+  regression-test:
     runs-on: ubuntu-latest
-    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - host: ssw-giga-04
+            suite: atom-plus-4.robot
+            num_device: 4
+          - host: ssw-giga-05
+            suite: atom-plus-8.robot
+            num_device: 8
+          - host: ssw-giga-06
+            suite: atom-plus-16.robot
+            num_device: 16
+    outputs:
+      host-list: ${{ steps.collect-hosts.outputs.host-list }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Run tests
-      run: echo "Running tests..."
+    - name: Set host information
+      id: collect-hosts
+      run: |
+        echo "Matrix host: ${{ matrix.host }}"
+        echo "Matrix suite: ${{ matrix.suite }}"
+        echo "Matrix num_device: ${{ matrix.num_device }}"
+        echo "host=${{ matrix.host }}" >> $GITHUB_OUTPUT
+        echo "suite=${{ matrix.suite }}" >> $GITHUB_OUTPUT
+        echo "num-device=${{ matrix.num_device }}" >> $GITHUB_OUTPUT
+        
+    - name: Simulate test execution
+      run: |
+        echo "Running tests on ${{ matrix.host }} with suite ${{ matrix.suite }}"
+        # 시뮬레이션을 위한 디렉토리 생성
+        mkdir -p /tmp/test-artifacts/${{ matrix.host }}
+        echo "Test completed on ${{ matrix.host }}" > /tmp/test-artifacts/${{ matrix.host }}/result.txt
+
+  merge-result:
+    needs: regression-test
+    runs-on: ubuntu-latest
+    if: always()
+    env:
+      REGRESSION_ARTIFACTS_BASE: /tmp/test-artifacts
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
       
-    - name: Build
-      run: echo "Building project..."
+    - name: Collect host list with fallback
+      id: collect-hosts
+      run: |
+        echo "=== Method 1: From job outputs ==="
+        HOST_LIST_OUTPUT='${{ toJson(needs.regression-test.outputs.host-list) }}'
+        echo "Raw output: $HOST_LIST_OUTPUT"
+        
+        if [ "$HOST_LIST_OUTPUT" != "null" ] && [ "$HOST_LIST_OUTPUT" != "[]" ] && [ -n "$HOST_LIST_OUTPUT" ]; then
+          HOST_LIST=$(echo "$HOST_LIST_OUTPUT" | jq -r '.[]' | sort -u | tr '\n' ' ' | sed 's/ $//')
+          echo "✅ Parsed from outputs: $HOST_LIST"
+        else
+          echo "=== Method 2: From artifacts directory ==="
+          HOST_LIST=$(find ${{ env.REGRESSION_ARTIFACTS_BASE }} -maxdepth 1 -type d -name "ssw-*" 2>/dev/null | sed 's|.*/||' | sort -u | tr '\n' ' ' | sed 's/ $//')
+          echo "✅ Parsed from artifacts: $HOST_LIST"
+        fi
+        
+        if [ -z "$HOST_LIST" ]; then
+          echo "❌ No hosts found!"
+          echo "Available directories:"
+          ls -la ${{ env.REGRESSION_ARTIFACTS_BASE }} || echo "Directory not accessible"
+          exit 1
+        fi
+        
+        echo "🎯 Final host list: $HOST_LIST"
+        echo "host-list=$HOST_LIST" >> $GITHUB_OUTPUT
+        echo "host-count=$(echo $HOST_LIST | wc -w)" >> $GITHUB_OUTPUT
+
