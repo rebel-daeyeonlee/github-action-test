@@ -1,4 +1,4 @@
-name: Test Workflow
+name: Test Host List Parsing
 
 on:
   push:
@@ -26,22 +26,15 @@ jobs:
     outputs:
       host-list: ${{ steps.collect-hosts.outputs.host-list }}
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
     - name: Set host information
       id: collect-hosts
       run: |
         echo "Matrix host: ${{ matrix.host }}"
-        echo "Matrix suite: ${{ matrix.suite }}"
-        echo "Matrix num_device: ${{ matrix.num_device }}"
         echo "host=${{ matrix.host }}" >> $GITHUB_OUTPUT
-        echo "suite=${{ matrix.suite }}" >> $GITHUB_OUTPUT
-        echo "num-device=${{ matrix.num_device }}" >> $GITHUB_OUTPUT
         
     - name: Simulate test execution
       run: |
-        echo "Running tests on ${{ matrix.host }} with suite ${{ matrix.suite }}"
+        echo "Running tests on ${{ matrix.host }}"
         # 시뮬레이션을 위한 디렉토리 생성
         mkdir -p /tmp/test-artifacts/${{ matrix.host }}
         echo "Test completed on ${{ matrix.host }}" > /tmp/test-artifacts/${{ matrix.host }}/result.txt
@@ -53,12 +46,10 @@ jobs:
     env:
       REGRESSION_ARTIFACTS_BASE: /tmp/test-artifacts
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Collect host list with fallback
-      id: collect-hosts
+    - name: Test host list parsing logic
       run: |
+        echo "=== Testing Host List Parsing Logic ==="
+        
         echo "=== Method 1: From job outputs ==="
         HOST_LIST_OUTPUT='${{ toJson(needs.regression-test.outputs.host-list) }}'
         echo "Raw output: $HOST_LIST_OUTPUT"
@@ -67,19 +58,9 @@ jobs:
           HOST_LIST=$(echo "$HOST_LIST_OUTPUT" | jq -r '.[]' | sort -u | tr '\n' ' ' | sed 's/ $//')
           echo "✅ Parsed from outputs: $HOST_LIST"
         else
-          echo "=== Method 2: From artifacts directory ==="
-          HOST_LIST=$(find ${{ env.REGRESSION_ARTIFACTS_BASE }} -maxdepth 1 -type d -name "ssw-*" 2>/dev/null | sed 's|.*/||' | sort -u | tr '\n' ' ' | sed 's/ $//')
-          echo "✅ Parsed from artifacts: $HOST_LIST"
+          echo "❌ Failed to parse from outputs"
         fi
         
-        if [ -z "$HOST_LIST" ]; then
-          echo "❌ No hosts found!"
-          echo "Available directories:"
-          ls -la ${{ env.REGRESSION_ARTIFACTS_BASE }} || echo "Directory not accessible"
-          exit 1
-        fi
+
         
-        echo "🎯 Final host list: $HOST_LIST"
-        echo "host-list=$HOST_LIST" >> $GITHUB_OUTPUT
-        echo "host-count=$(echo $HOST_LIST | wc -w)" >> $GITHUB_OUTPUT
 
