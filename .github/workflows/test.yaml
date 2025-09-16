@@ -32,6 +32,11 @@ jobs:
         echo "Matrix host: ${{ matrix.host }}"
         echo "host=${{ matrix.host }}" >> $GITHUB_OUTPUT
         echo "host-list=${{ matrix.host }}" >> $GITHUB_OUTPUT
+        
+    - name: Save host to shared file
+      run: |
+        echo "Saving host ${{ matrix.host }} to shared file"
+        echo "${{ matrix.host }}" >> /tmp/all-hosts.txt
 
   merge-result:
     needs: regression-test
@@ -42,28 +47,41 @@ jobs:
       run: |
         echo "=== Testing Host List Parsing Logic ==="
         
-        echo "=== Method 1: From job outputs ==="
-        HOST_LIST_OUTPUT='${{ toJson(needs.regression-test.outputs.host-list) }}'
-        echo "Raw output: $HOST_LIST_OUTPUT"
-        
-        # Matrix job outputs는 문자열이므로 직접 사용
-        if [ "$HOST_LIST_OUTPUT" != "null" ] && [ "$HOST_LIST_OUTPUT" != "[]" ] && [ -n "$HOST_LIST_OUTPUT" ]; then
-          # 문자열을 배열로 변환 (쉼표로 구분된 경우)
-          if [[ "$HOST_LIST_OUTPUT" == *","* ]]; then
-            HOST_LIST=$(echo "$HOST_LIST_OUTPUT" | tr ',' '\n' | sort -u | tr '\n' ' ' | sed 's/ $//')
-          else
-            # 단일 문자열인 경우
-            HOST_LIST="$HOST_LIST_OUTPUT"
-          fi
-          echo "✅ Parsed from outputs: $HOST_LIST"
+        echo "=== Method 1: From shared file ==="
+        if [ -f "/tmp/all-hosts.txt" ]; then
+          echo "Reading hosts from shared file..."
+          cat /tmp/all-hosts.txt
+          echo ""
+          
+          HOST_LIST=$(cat /tmp/all-hosts.txt | sort -u | tr '\n' ' ' | sed 's/ $//')
+          echo "✅ Parsed from file: $HOST_LIST"
         else
-          echo "❌ Failed to parse from outputs"
-          echo "No fallback method available"
-          exit 1
+          echo "❌ Shared file not found"
+          echo "Trying job outputs as fallback..."
+          
+          # Fallback: job outputs 사용
+          HOST_LIST_OUTPUT='${{ toJson(needs.regression-test.outputs.host-list) }}'
+          echo "Raw output: $HOST_LIST_OUTPUT"
+          
+          if [ "$HOST_LIST_OUTPUT" != "null" ] && [ "$HOST_LIST_OUTPUT" != "[]" ] && [ -n "$HOST_LIST_OUTPUT" ]; then
+            HOST_LIST="$HOST_LIST_OUTPUT"
+            echo "✅ Parsed from outputs: $HOST_LIST"
+          else
+            echo "❌ No hosts found"
+            exit 1
+          fi
         fi
         
+        echo ""
         echo "🎯 Final host list: $HOST_LIST"
         echo "🎯 Host count: $(echo $HOST_LIST | wc -w)"
+        
+        # 실제 사용 예시
+        echo ""
+        echo "=== Usage Example ==="
+        for host in $HOST_LIST; do
+          echo "  Processing host: $host"
+        done
         
 
         
