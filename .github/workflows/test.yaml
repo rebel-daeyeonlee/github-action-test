@@ -33,30 +33,43 @@ jobs:
         echo "host=${{ matrix.host }}" >> $GITHUB_OUTPUT
         echo "host-list=${{ matrix.host }}" >> $GITHUB_OUTPUT
         
-    - name: Save host to shared file
+    - name: Append host to shared cache
       run: |
-        echo "Saving host ${{ matrix.host }} to shared file"
-        echo "${{ matrix.host }}" >> /tmp/all-hosts.txt
+        echo "Appending host ${{ matrix.host }} to shared cache"
+        echo "${{ matrix.host }}" >> all-hosts.txt
+        
+    - name: Cache all hosts
+      uses: actions/cache/save@v3
+      with:
+        path: all-hosts.txt
+        key: all-hosts-${{ github.run_id }}
 
   merge-result:
     needs: regression-test
     runs-on: ubuntu-latest
     if: always()
     steps:
+    - name: Restore all hosts from cache
+      uses: actions/cache/restore@v3
+      with:
+        key: all-hosts-${{ github.run_id }}
+        path: all-hosts.txt
+        fail-on-cache-miss: false
+        
     - name: Test host list parsing logic
       run: |
         echo "=== Testing Host List Parsing Logic ==="
         
-        echo "=== Method 1: From shared file ==="
-        if [ -f "/tmp/all-hosts.txt" ]; then
-          echo "Reading hosts from shared file..."
-          cat /tmp/all-hosts.txt
+        echo "=== Method 1: From shared cache ==="
+        if [ -f "all-hosts.txt" ]; then
+          echo "Reading hosts from shared cache..."
+          cat all-hosts.txt
           echo ""
           
-          HOST_LIST=$(cat /tmp/all-hosts.txt | sort -u | tr '\n' ' ' | sed 's/ $//')
-          echo "✅ Parsed from file: $HOST_LIST"
+          HOST_LIST=$(cat all-hosts.txt | sort -u | tr '\n' ' ' | sed 's/ $//')
+          echo "✅ Parsed from shared cache: $HOST_LIST"
         else
-          echo "❌ Shared file not found"
+          echo "❌ No shared cache found"
           echo "Trying job outputs as fallback..."
           
           # Fallback: job outputs 사용
